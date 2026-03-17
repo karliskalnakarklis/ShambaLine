@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 
-const FLASK_BASE = "http://karliss-macbook-pro.local:5001";
+const FLASK_BASE = "https://shambaline-878383503053.europe-west1.run.app";
 
 export function useSpeech() {
   const [isListening, setIsListening] = useState(false);

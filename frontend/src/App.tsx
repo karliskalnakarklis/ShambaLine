@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { Phone, PhoneOff } from "lucide-react";
 import { useSpeech } from "./hooks/useSpeech";
 
-const API_BASE = "http://karliss-macbook-pro.local:5001";
+const API_BASE = "https://shambaline-878383503053.europe-west1.run.app";
 const RECORD_SECONDS = 7;
 
 type Phase = "idle" | "starting" | "recording" | "processing" | "speaking";

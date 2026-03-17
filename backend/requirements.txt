@@ -3,3 +3,5 @@ flask-cors
 groq
 requests
 gTTS
+python-dotenv
+gunicorn
