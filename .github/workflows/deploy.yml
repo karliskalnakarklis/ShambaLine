@@ -31,7 +31,7 @@ jobs:
             --source . \
             --region europe-west1 \
             --allow-unauthenticated \
-            --set-env-vars GROQ_API_KEY=${{ secrets.GROQ_API_KEY }} \
+            --set-env-vars GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},GCP_PROJECT=${{ secrets.GCP_PROJECT_ID }},GCP_REGION=us-central1 \
             --memory 512Mi \
             --timeout 120 \
             --project ${{ secrets.GCP_PROJECT_ID }}

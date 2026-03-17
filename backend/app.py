@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify, render_template_string, send_file
 from flask_cors import CORS
 from groq import Groq
 from gtts import gTTS
+import vertexai
+from vertexai.generative_models import GenerativeModel, ChatSession
 import requests
 import re
 import io
@@ -14,11 +16,15 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-client = Groq(api_key=os.environ["GROQ_API_KEY"])
+# Groq used only for Whisper STT
+groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
-SYSTEM_PROMPT = {
-    "role": "system",
-    "content": """
+# Vertex AI Gemini for chat (uses GCP service account credentials automatically)
+GCP_PROJECT = os.environ.get("GCP_PROJECT", "shambaline-app")
+GCP_REGION  = os.environ.get("GCP_REGION", "us-central1")
+vertexai.init(project=GCP_PROJECT, location=GCP_REGION)
+
+SYSTEM_PROMPT_TEXT = """
 You are an AI voice assistant for farmers in East Africa.
 Keep talking in English.
 Be straight forward and simple.
@@ -83,9 +89,13 @@ Safety: Food safety and animal welfare must always be prioritized; avoid advice 
 Access to technology: Advice must take into account limited availability of modern tools, machinery, or electronic devices.
 Budget-conscious: Avoid suggestions that require money or expensive equipment.
 """
-}
 
-messages = [SYSTEM_PROMPT]
+gemini_model = GenerativeModel(
+    "gemini-2.0-flash-001",
+    system_instruction=[SYSTEM_PROMPT_TEXT]
+)
+
+chat_session: ChatSession = gemini_model.start_chat()
 transcript = []  # [{role, text, time}]
 
 
@@ -316,7 +326,7 @@ def transcribe():
     filename = audio_file.filename or "recording.mp4"
     content_type = audio_file.content_type or "audio/mp4"
 
-    transcription = client.audio.transcriptions.create(
+    transcription = groq_client.audio.transcriptions.create(
         model="whisper-large-v3",
         file=(filename, audio_bytes, content_type),
     )
@@ -334,22 +344,16 @@ def chat():
 
     log("user", user_text)
 
+    prompt = user_text
     if any(w in user_text.lower() for w in ["weather", "rain", "temperature", "forecast"]):
         city = extract_city(user_text)
         if city:
             weather_data = get_weather(city)
             if weather_data:
-                messages.append({"role": "system", "content": weather_data})
+                prompt = f"{weather_data}\n\nFarmer's question: {user_text}"
 
-    messages.append({"role": "user", "content": user_text})
-
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=messages
-    )
-
-    ai_text = response.choices[0].message.content.strip()
-    messages.append({"role": "assistant", "content": ai_text})
+    response = chat_session.send_message(prompt)
+    ai_text = response.text.strip()
 
     log("assistant", ai_text)
 
@@ -373,8 +377,8 @@ def tts():
 
 @app.route("/api/start", methods=["POST"])
 def start():
-    global messages, transcript
-    messages = [SYSTEM_PROMPT]
+    global chat_session, transcript
+    chat_session = gemini_model.start_chat()
     transcript = []
     greeting = "Welcome to ShambaLine! How can I help you with your farm today?"
     log("assistant", greeting)
@@ -383,8 +387,8 @@ def start():
 
 @app.route("/api/reset", methods=["POST"])
 def reset():
-    global messages, transcript
-    messages = [SYSTEM_PROMPT]
+    global chat_session, transcript
+    chat_session = gemini_model.start_chat()
     transcript = []
     return jsonify({"status": "ok"})
 
