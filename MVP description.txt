@@ -1,0 +1,3 @@
+MVP:
+
+ShambaLine is a phone calling application. When pressing on the call option you are connected to an AI model that can communicate with you. So you run the python file, press play on the phone and then using the phones microphone you can communicate with the AI chatbot. The goal of the chatbot hotline is to assist. The goal of the chatbot hotline is to help farmers in East Africa by providing guidance. For now we use English as the language. 
