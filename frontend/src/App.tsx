@@ -3,7 +3,6 @@ import { Phone, PhoneOff } from "lucide-react";
 import { useSpeech } from "./hooks/useSpeech";
 
 const API_BASE = "https://shambaline-878383503053.europe-west1.run.app";
-const RECORD_SECONDS = 7;
 
 type Phase = "idle" | "starting" | "recording" | "processing" | "speaking";
 
@@ -29,7 +28,7 @@ export default function App() {
   const activeRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { startRecording, stopRecordingAndTranscribe, speak, stopSpeaking } = useSpeech();
+  const { recordAndTranscribeAuto, cancelRecording, speak, stopSpeaking } = useSpeech();
 
   const startTimer = () => {
     setCallDuration(0);
@@ -49,33 +48,23 @@ export default function App() {
   const conversationLoop = useCallback(async () => {
     while (activeRef.current) {
       setPhase("recording");
-      try {
-        await startRecording();
-      } catch {
-        break;
-      }
 
-      await new Promise((res) => setTimeout(res, RECORD_SECONDS * 1000));
-
-      if (!activeRef.current) {
-        try { await stopRecordingAndTranscribe(); } catch { /* cleanup */ }
-        break;
-      }
-
-      setPhase("processing");
       let userText = "";
       try {
-        userText = await stopRecordingAndTranscribe();
+        userText = await recordAndTranscribeAuto(() => setPhase("processing"));
       } catch {
+        if (!activeRef.current) break;
         continue;
       }
 
+      if (!activeRef.current) break;
       if (!userText.trim()) continue;
 
       if (["stop", "goodbye", "hang up", "end call"].some(w => userText.toLowerCase().includes(w))) {
         break;
       }
 
+      setPhase("processing");
       let reply = "";
       try {
         reply = await apiChat(userText);
@@ -95,7 +84,7 @@ export default function App() {
     stopTimer();
     setPhase("idle");
     setCallDuration(0);
-  }, [startRecording, stopRecordingAndTranscribe, speak]);
+  }, [recordAndTranscribeAuto, speak]);
 
   const handleCall = async () => {
     if (phase !== "idle") return;
@@ -120,6 +109,7 @@ export default function App() {
 
   const handleHangUp = async () => {
     activeRef.current = false;
+    cancelRecording();
     await stopSpeaking();
     stopTimer();
     setPhase("idle");

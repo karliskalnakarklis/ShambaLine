@@ -2,8 +2,6 @@ from flask import Flask, request, jsonify, render_template_string, send_file
 from flask_cors import CORS
 from groq import Groq
 from gtts import gTTS
-import vertexai
-from vertexai.generative_models import GenerativeModel, ChatSession
 import requests
 import re
 import io
@@ -16,13 +14,8 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# Groq used only for Whisper STT
+# Groq for both Whisper STT and LLaMA chat
 groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
-
-# Vertex AI Gemini for chat (uses GCP service account credentials automatically)
-GCP_PROJECT = os.environ.get("GCP_PROJECT", "shambaline-app")
-GCP_REGION  = os.environ.get("GCP_REGION", "us-central1")
-vertexai.init(project=GCP_PROJECT, location=GCP_REGION)
 
 SYSTEM_PROMPT_TEXT = """
 You are an AI voice assistant for farmers in East Africa.
@@ -90,13 +83,8 @@ Access to technology: Advice must take into account limited availability of mode
 Budget-conscious: Avoid suggestions that require money or expensive equipment.
 """
 
-gemini_model = GenerativeModel(
-    "gemini-2.0-flash-001",
-    system_instruction=[SYSTEM_PROMPT_TEXT]
-)
-
-chat_session: ChatSession = gemini_model.start_chat()
-transcript = []  # [{role, text, time}]
+chat_history = []  # Groq message history for multi-turn chat
+transcript = []    # [{role, text, time}]
 
 
 def log(role, text):
@@ -352,8 +340,15 @@ def chat():
             if weather_data:
                 prompt = f"{weather_data}\n\nFarmer's question: {user_text}"
 
-    response = chat_session.send_message(prompt)
-    ai_text = response.text.strip()
+    chat_history.append({"role": "user", "content": prompt})
+
+    response = groq_client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[{"role": "system", "content": SYSTEM_PROMPT_TEXT}] + chat_history,
+        max_tokens=300,
+    )
+    ai_text = response.choices[0].message.content.strip()
+    chat_history.append({"role": "assistant", "content": ai_text})
 
     log("assistant", ai_text)
 
@@ -377,8 +372,8 @@ def tts():
 
 @app.route("/api/start", methods=["POST"])
 def start():
-    global chat_session, transcript
-    chat_session = gemini_model.start_chat()
+    global chat_history, transcript
+    chat_history = []
     transcript = []
     greeting = "Welcome to ShambaLine! How can I help you with your farm today?"
     log("assistant", greeting)
@@ -387,8 +382,8 @@ def start():
 
 @app.route("/api/reset", methods=["POST"])
 def reset():
-    global chat_session, transcript
-    chat_session = gemini_model.start_chat()
+    global chat_history, transcript
+    chat_history = []
     transcript = []
     return jsonify({"status": "ok"})
 
