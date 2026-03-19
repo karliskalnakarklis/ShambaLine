@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template_string, send_file
 from flask_cors import CORS
 from groq import Groq
-from gtts import gTTS
+from google.cloud import texttospeech
 import requests
 import re
 import io
@@ -16,6 +16,9 @@ CORS(app)
 
 # Groq for both Whisper STT and LLaMA chat
 groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
+
+# Google Cloud TTS client
+tts_client = texttospeech.TextToSpeechClient()
 
 SYSTEM_PROMPT_TEXT = """
 You are an AI voice assistant for farmers in East Africa.
@@ -362,11 +365,20 @@ def tts():
     if not text:
         return jsonify({"error": "No text"}), 400
 
-    # tld="co.za" gives South African English — closest available to East African accent
-    tts_obj = gTTS(text=text, lang="en", tld="co.za")
-    fp = io.BytesIO()
-    tts_obj.write_to_fp(fp)
-    fp.seek(0)
+    # Google Cloud TTS — en-KE (Kenyan English) for East African accent
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+    voice = texttospeech.VoiceSelectionParams(
+        language_code="en-KE",
+        ssml_gender=texttospeech.SsmlVoiceGender.FEMALE,
+    )
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3,
+        speaking_rate=1.0,
+    )
+    response = tts_client.synthesize_speech(
+        input=synthesis_input, voice=voice, audio_config=audio_config
+    )
+    fp = io.BytesIO(response.audio_content)
     return send_file(fp, mimetype="audio/mpeg")
 
 

@@ -2,6 +2,6 @@ flask
 flask-cors
 groq
 requests
-gTTS
+google-cloud-texttospeech
 python-dotenv
 gunicorn
